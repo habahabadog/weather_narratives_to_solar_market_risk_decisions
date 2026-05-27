@@ -23,6 +23,7 @@ The repository is intentionally scoped to the retained manuscript workflow. It d
 - `data/paired_seed_summary.csv`: paired residual-bootstrap summary intervals.
 - `data/case_2024_03_13.csv`: hourly inputs for the 13 March 2024 case study.
 - `data/case_screening.csv`: extreme-weather case-screening cache.
+- `assets/fig_pipeline_method_overview.png`: manuscript method-overview figure asset.
 - `scripts/reproduce_manuscript_outputs.py`: single script that rebuilds the released tables and figures.
 
 ### Raw-data rebuild code

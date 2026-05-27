@@ -198,13 +198,26 @@ def plot_decision_sensitivity(weight_table: pd.DataFrame, output_dir: Path) -> N
     fig, axes = plt.subplots(1, 3, figsize=(7.35, 2.9), sharex=True)
     for ax, (column, ylabel, color) in zip(axes, metrics):
         y = data[column].astype(float).to_numpy()
-        ax.plot(x, y, marker="o", lw=1.7, color=color)
+        ax.fill_between(x, 0.0, y, color=color, alpha=0.10, linewidth=0)
+        ax.plot(x, y, marker="o", ms=4.5, lw=1.7, color=color, markeredgecolor="white", markeredgewidth=0.7)
         ax.axhline(0.0, color="0.35", lw=0.75, ls=":")
-        ax.axvline(0.50, color=OKABE_ITO["vermillion"], lw=1.0, ls="--")
+        ax.axvline(0.50, color=OKABE_ITO["vermillion"], lw=1.0, ls="--", alpha=0.85)
         ax.set_xlabel("LP weight")
         ax.set_ylabel(ylabel)
         ax.set_xticks(x)
         ax.set_xticklabels([f"{value:.2f}" for value in x])
+        ax.grid(True, axis="y", alpha=0.18)
+        ax.grid(False, axis="x")
+    axes[1].text(
+        0.50,
+        0.96,
+        "selected hybrid weight",
+        transform=axes[1].transAxes,
+        ha="center",
+        va="top",
+        fontsize=7.2,
+        color="0.30",
+    )
     fig.tight_layout()
     save_figure(fig, output_dir, "fig_selected_cloud_rule_decision_sensitivity")
 
@@ -216,12 +229,12 @@ def plot_paired_seed_effects(seed_deltas: pd.DataFrame, seed_summary: pd.DataFra
         ("imbalance_reduction_gwh", "Imbalance reduction\n(GWh)", OKABE_ITO["blue"], "Imbalance reduction"),
     ]
     summary = {str(row["metric"]): row for _, row in seed_summary.iterrows()}
-    fig, axes = plt.subplots(1, 3, figsize=(7.3, 3.55))
+    fig, axes = plt.subplots(1, 3, figsize=(7.25, 3.15))
     rng = np.random.default_rng(27)
-    for ax, (column, xlabel, color, summary_key) in zip(axes, metrics):
+    for panel_idx, (ax, (column, xlabel, color, summary_key)) in enumerate(zip(axes, metrics)):
         values = pd.to_numeric(seed_deltas[column], errors="coerce").dropna().to_numpy(dtype=float)
-        jitter = rng.normal(0.0, 0.025, len(values))
-        ax.scatter(values, jitter, s=28, color=color, alpha=0.64, edgecolor="none")
+        jitter = rng.normal(0.0, 0.035, len(values))
+        ax.scatter(values, jitter, s=30, color=color, alpha=0.66, edgecolor="white", linewidth=0.35, zorder=3)
         if summary_key in summary:
             row = summary[summary_key]
             mean = float(row["mean"])
@@ -244,18 +257,30 @@ def plot_paired_seed_effects(seed_deltas: pd.DataFrame, seed_summary: pd.DataFra
             capsize=4,
             zorder=4,
         )
+        x_min = min(float(values.min()), low)
+        x_max = max(float(values.max()), high)
+        span = max(x_max - x_min, 1e-6)
+        ax.axvspan(low, high, color=color, alpha=0.08, zorder=0)
         ax.axvline(0.0, color="0.35", lw=0.8, ls=":")
         ax.set_yticks([])
         ax.set_xlabel(xlabel)
-        ax.set_ylim(-0.12, 0.12)
+        ax.set_ylim(-0.15, 0.15)
+        ax.grid(True, axis="x", alpha=0.18)
+        ax.grid(False, axis="y")
+        if column == "imbalance_reduction_gwh":
+            ax.set_xlim(x_min - 0.18 * span, x_max + 0.12 * span)
+        else:
+            ax.set_xlim(min(0.0, x_min - 0.12 * span), x_max + 0.12 * span)
+        ax.text(-0.12, 1.03, chr(ord("a") + panel_idx), transform=ax.transAxes, fontsize=10, fontweight="bold", va="bottom", ha="left")
         ax.text(
-            0.02,
-            0.92,
-            f"{int(np.sum(values > 0))}/{len(values)} seeds positive",
+            0.98,
+            0.93,
+            f"{int(np.sum(values > 0))}/{len(values)} positive",
             transform=ax.transAxes,
-            fontsize=8.0,
-            ha="left",
+            fontsize=7.4,
+            ha="right",
             va="top",
+            color="0.25",
         )
     fig.tight_layout()
     save_figure(fig, output_dir, "fig_selected_cloud_rule_paired_seed_effects")
@@ -273,7 +298,14 @@ def plot_selected_value_cvar_tradeoff(summary: pd.DataFrame, output_dir: Path) -
         "Pure LLM cloud-rule LP": ("Pure LLM\ncloud-rule LP", OKABE_ITO["orange"], "^"),
         "LLM cloud-rule hybrid blend": ("LLM cloud-rule\nhybrid", OKABE_ITO["vermillion"], "*"),
     }
-    fig, ax = plt.subplots(figsize=(5.2, 3.35))
+    fig, ax = plt.subplots(figsize=(5.55, 3.55))
+    rule = data[data["strategy"].astype(str).eq("Rule-core hybrid blend")]
+    llm = data[data["strategy"].astype(str).eq("LLM cloud-rule hybrid blend")]
+    if not rule.empty:
+        rule_x = float(rule.iloc[0]["cvar95_loss_kusd_h"])
+        rule_y = float(rule.iloc[0]["value_musd"])
+        ax.axvline(rule_x, color="0.55", lw=0.85, ls="--", alpha=0.7, zorder=0)
+        ax.axhline(rule_y, color="0.55", lw=0.85, ls="--", alpha=0.7, zorder=0)
     for _, row in data.iterrows():
         label, color, marker = style.get(str(row["strategy"]), (str(row["strategy"]), OKABE_ITO["black"], "o"))
         size = 145 if "LLM cloud-rule hybrid" in str(row["strategy"]) else 70
@@ -287,17 +319,21 @@ def plot_selected_value_cvar_tradeoff(summary: pd.DataFrame, output_dir: Path) -
             linewidth=0.8,
             zorder=3,
         )
+        offsets = {
+            "Rule-core hybrid blend": (7, 7, "left", "bottom"),
+            "Pure LLM cloud-rule LP": (8, 0, "left", "center"),
+            "LLM cloud-rule hybrid blend": (8, 8, "left", "bottom"),
+        }
+        dx, dy, ha, va = offsets.get(str(row["strategy"]), (5, 4, "left", "bottom"))
         ax.annotate(
             label,
             xy=(float(row["cvar95_loss_kusd_h"]), float(row["value_musd"])),
-            xytext=(5, 4),
+            xytext=(dx, dy),
             textcoords="offset points",
-            fontsize=7.5,
-            ha="left",
-            va="bottom",
+            fontsize=7.4,
+            ha=ha,
+            va=va,
         )
-    rule = data[data["strategy"].astype(str).eq("Rule-core hybrid blend")]
-    llm = data[data["strategy"].astype(str).eq("LLM cloud-rule hybrid blend")]
     if not rule.empty and not llm.empty:
         ax.annotate(
             "",
@@ -305,9 +341,21 @@ def plot_selected_value_cvar_tradeoff(summary: pd.DataFrame, output_dir: Path) -
             xytext=(float(rule.iloc[0]["cvar95_loss_kusd_h"]), float(rule.iloc[0]["value_musd"])),
             arrowprops={"arrowstyle": "->", "lw": 1.2, "color": "0.25", "shrinkA": 7, "shrinkB": 7},
         )
-    ax.set_xlabel("CVaR95 loss (k USD/h)")
-    ax.set_ylabel("Annual proxy value (M USD)")
-    ax.grid(True, alpha=0.23)
+        value_gain = float(llm.iloc[0]["value_musd"]) - float(rule.iloc[0]["value_musd"])
+        cvar_gain = float(rule.iloc[0]["cvar95_loss_kusd_h"]) - float(llm.iloc[0]["cvar95_loss_kusd_h"])
+        ax.text(
+            0.03,
+            0.06,
+            f"Hybrid gain vs reference\n+{value_gain:.2f} M USD\n+{cvar_gain:.2f} k USD/h CVaR reduction",
+            transform=ax.transAxes,
+            fontsize=7.2,
+            ha="left",
+            va="bottom",
+            bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "edgecolor": "0.82", "linewidth": 0.6},
+        )
+    ax.set_xlabel("CVaR95 loss (k USD/h, lower is better)")
+    ax.set_ylabel("Annual proxy value (M USD, higher is better)")
+    ax.grid(True, alpha=0.18)
     ax.set_xlim(float(data["cvar95_loss_kusd_h"].min()) - 10, float(data["cvar95_loss_kusd_h"].max()) + 13)
     ax.set_ylim(float(data["value_musd"].min()) - 2.5, float(data["value_musd"].max()) + 2.2)
     fig.tight_layout()
@@ -321,7 +369,7 @@ def plot_selected_case_study(case_data: pd.DataFrame, output_dir: Path, case_dat
     if "event_types" in data.columns and not data["event_types"].dropna().empty:
         event_text = str(data["event_types"].dropna().iloc[0]).replace("|", ", ")
 
-    fig, axes = plt.subplots(4, 1, figsize=(7.25, 7.45), sharex=True, gridspec_kw={"hspace": 0.28})
+    fig, axes = plt.subplots(4, 1, figsize=(7.25, 7.35), sharex=True, gridspec_kw={"hspace": 0.24})
 
     axes[0].plot(hours, data["pv_mw"], color=OKABE_ITO["black"], lw=1.8, label="Actual PV")
     axes[0].plot(hours, data["anchor_bid_mw"], color=OKABE_ITO["blue"], lw=1.4, ls="--", label="Rule-core anchor bid")
@@ -371,9 +419,22 @@ def plot_selected_case_study(case_data: pd.DataFrame, output_dir: Path, case_dat
     axes[3].set_ylabel("Value delta\n(thousand USD)")
     axes[3].set_xlabel("Local hour")
     axes[3].legend(frameon=False, ncol=2, loc="upper left")
+    final_delta = float(data["cumulative_revenue_delta_usd"].iloc[-1]) / 1_000.0
+    axes[3].annotate(
+        f"+{final_delta:.1f}k USD",
+        xy=(float(hours[-1]), final_delta),
+        xytext=(-42, 10),
+        textcoords="offset points",
+        fontsize=7.5,
+        arrowprops={"arrowstyle": "->", "lw": 0.8, "color": "0.25"},
+        ha="right",
+        va="bottom",
+    )
 
     for idx, ax in enumerate(axes):
+        ax.axvspan(6, 19, color=OKABE_ITO["yellow"], alpha=0.08, zorder=0)
         ax.text(-0.055, 1.02, chr(ord("a") + idx), transform=ax.transAxes, fontsize=10, fontweight="bold", va="bottom", ha="left")
+        ax.grid(True, alpha=0.18)
     axes[-1].set_xticks(np.arange(0, 24, 2))
     axes[-1].set_xlim(-0.5, 23.5)
     fig.subplots_adjust(top=0.965, left=0.14, right=0.985, bottom=0.075)

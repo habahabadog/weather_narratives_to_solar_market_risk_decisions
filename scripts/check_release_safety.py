@@ -10,6 +10,7 @@ DEFAULT_ROOTS = [
     Path("tests"),
     Path("config"),
     Path("data"),
+    Path("assets"),
     Path("README.md"),
     Path("RAW_DATA_REBUILD.md"),
     Path(".env.example"),
