@@ -2,3 +2,8 @@ __pycache__/
 .venv/
 venv/
 outputs/
+data_multi_weather_2023_2024/
+data/processed/
+data/raw/
+manifest.csv
+.env

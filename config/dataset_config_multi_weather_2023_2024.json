@@ -1,0 +1,143 @@
+{
+  "time_range": {
+    "start_date": "2023-01-01",
+    "end_date": "2025-01-01",
+    "date_semantics": "start inclusive, end exclusive, California local dates"
+  },
+  "region": {
+    "name": "CAISO SP15 / multi-WFO California weather proxies",
+    "caiso_node": "TH_SP15_GEN-APND",
+    "solar_trading_hub": "SP15",
+    "weather_point": {
+      "name": "Los Angeles downtown proxy",
+      "latitude": 34.0522,
+      "longitude": -118.2437
+    },
+    "weather_points": [
+      {
+        "name": "los_angeles_lox",
+        "latitude": 34.0522,
+        "longitude": -118.2437
+      },
+      {
+        "name": "san_diego_sgx",
+        "latitude": 32.7157,
+        "longitude": -117.1611
+      },
+      {
+        "name": "fresno_hnx",
+        "latitude": 36.7378,
+        "longitude": -119.7871
+      },
+      {
+        "name": "sacramento_sto",
+        "latitude": 38.5816,
+        "longitude": -121.4944
+      },
+      {
+        "name": "san_francisco_mtr",
+        "latitude": 37.7749,
+        "longitude": -122.4194
+      }
+    ],
+    "nws_afos_pils": [
+      "AFDLOX",
+      "AFDSGX",
+      "AFDHNX",
+      "AFDSTO",
+      "AFDMTR"
+    ],
+    "storm_event_state": "CALIFORNIA",
+    "storm_event_counties": [
+      "ALAMEDA",
+      "CONTRA COSTA",
+      "FRESNO",
+      "IMPERIAL",
+      "KERN",
+      "KINGS",
+      "LOS ANGELES",
+      "MADERA",
+      "MARIN",
+      "MERCED",
+      "MONTEREY",
+      "NAPA",
+      "ORANGE",
+      "RIVERSIDE",
+      "SACRAMENTO",
+      "SAN BERNARDINO",
+      "SAN DIEGO",
+      "SAN FRANCISCO",
+      "SAN JOAQUIN",
+      "SAN LUIS OBISPO",
+      "SAN MATEO",
+      "SANTA BARBARA",
+      "SANTA CLARA",
+      "SANTA CRUZ",
+      "SOLANO",
+      "SONOMA",
+      "STANISLAUS",
+      "TULARE",
+      "VENTURA",
+      "YOLO"
+    ]
+  },
+  "datasets": {
+    "caiso_oasis": {
+      "enabled": true,
+      "items": [
+        "lmp_da",
+        "lmp_rt_5min",
+        "solar_dam",
+        "solar_rtd",
+        "solar_rtpd"
+      ]
+    },
+    "caiso_todays_outlook": {
+      "enabled": true,
+      "items": [
+        "fuelsource",
+        "demand",
+        "netdemand",
+        "wind_solar_wo_hybrids"
+      ]
+    },
+    "nws_text": {
+      "enabled": true
+    },
+    "storm_events": {
+      "enabled": true
+    },
+    "hrrr_zarr_point": {
+      "enabled": true,
+      "cycle_hours_utc": [
+        12
+      ],
+      "forecast_hours": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ]
+    }
+  },
+  "request": {
+    "timeout_seconds": 180,
+    "sleep_seconds": 1,
+    "retries": 5,
+    "user_agent": "scireport-caiso-noaa-downloader/0.1 (multi-weather 2023-2024 trial)"
+  }
+}
