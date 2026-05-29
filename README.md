@@ -18,14 +18,15 @@ The repository is scoped to the reported manuscript workflow and excludes tempor
 - `data/forecast_main.csv`: five-seed forecast summary for PV and real-time price.
 - `data/forecast_seed_summary.csv`: paired five-seed forecast comparisons.
 - `data/forecast_slice_metrics.csv`: forecast-slice metrics used in the slice figure and supplementary table.
-- `data/decision_summary.csv`: ten-seed settlement-proxy summary rows.
+- `data/decision_summary.csv`: settlement-proxy summary rows, including CAISO public anchor, no-text hybrid, rule-core hybrid, pure LLM LP, LLM rule-core-anchor hybrid, and LLM no-text-anchor hybrid baselines.
 - `data/lp_weight_sensitivity.csv`: LP-anchor sensitivity table.
 - `data/paired_seed_deltas.csv`: paired residual-bootstrap seed-level deltas.
 - `data/paired_seed_summary.csv`: paired residual-bootstrap summary intervals.
+- `data/paired_seed_deltas_fused_vs_no_text.csv` and `data/paired_seed_summary_fused_vs_no_text.csv`: paired LLM no-text-anchor hybrid deltas relative to the no-text hybrid reference.
 - `data/event_day_examples.csv`: weather-event case-study example table.
 - `data/case_2025_03_07.csv`: hourly inputs for the 7 March 2025 case study.
 - `assets/fig_pipeline_method_overview.png`: manuscript method-overview figure asset.
-- `scripts/reproduce_manuscript_outputs.py`: single script that rebuilds the released tables and figures.
+- `scripts/reproduce_manuscript_outputs.py`: single script that rebuilds the released tables, forecast-signal figure, decision-evidence figure, and case-study figure.
 
 ### Raw-data rebuild code
 
@@ -35,7 +36,7 @@ The repository is scoped to the reported manuscript workflow and excludes tempor
 - `scripts/rebuild_multi_nws_llm_cache.py`: optional structured-weather-cache refresh from raw NWS text.
 - `scripts/run_selected_cloud_rule_pipeline.py`: rebuilds the reported neural forecast predictions from processed public data.
 - `scripts/run_selected_cloud_rule_downstream.py`: reruns the reported downstream decision evaluation.
-- `scripts/build_selected_cloud_rule_enrichment.py`: rebuilds forecast-slice, decision-sensitivity, paired-seed, and case-study enrichment outputs.
+- `scripts/build_selected_cloud_rule_enrichment.py`: rebuilds forecast-slice, decision-sensitivity, paired-seed, value-risk, and case-study enrichment outputs from a full downstream run.
 - `RAW_DATA_REBUILD.md`: step-by-step raw-data rebuild instructions.
 
 ## Fast Manuscript Reproduction

@@ -91,8 +91,12 @@ The forecast/decision path is:
 
 - PV reference: MLP with rule-core narrative features.
 - PV LLM: MLP with the LLM cloud-rule feature.
+- PV no-text: MLP without narrative features.
+- PV no-text anchor: deterministic MLP no-text forecast used by the LLM no-text-anchor hybrid.
+- CAISO public anchor: CAISO day-ahead public solar forecast.
 - RT reference: Transformer with rule-text narrative features.
 - RT LLM: Transformer with LLM rule-equivalent narrative features.
+- RT no-text: Transformer without narrative features.
 
 ## 4. Run downstream decision experiments
 
@@ -108,6 +112,8 @@ python scripts/run_selected_cloud_rule_downstream.py \
   --deviation-penalty 50 \
   --scenario-count 20
 ```
+
+The downstream script writes the validation-selected rule-core hybrid, no-text hybrid, pure LLM LP, LLM rule-core-anchor hybrid, LLM no-text-anchor hybrid, and CAISO public-forecast anchor summaries, plus paired LLM-vs-rule-core and LLM-no-text-anchor-vs-no-text residual-bootstrap seed summaries.
 
 ## 5. Build enrichment outputs
 

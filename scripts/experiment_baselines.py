@@ -23,6 +23,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 PACIFIC_TZ = "America/Los_Angeles"
+REPO_ROOT = Path(__file__).resolve().parents[1]
 WEATHER_SCORE_COLUMNS = [
     "wx_cloud_score",
     "wx_storm_score",
@@ -470,6 +471,20 @@ def resolve_llm_api_config(mode: str, provider: str | None = None, model: str | 
     raise ValueError(f"unsupported NWS_LLM_PROVIDER: {provider}")
 
 
+def load_dotenv_if_present(path: Path = REPO_ROOT / ".env") -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", maxsplit=1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = value.strip().strip('"').strip("'")
+
+
 def build_llm_weather_messages(text: str) -> list[dict[str, str]]:
     example = {
         "cloud_severity": 0.0,
@@ -600,6 +615,7 @@ def extract_llm_weather_features(text: str) -> dict[str, float | str]:
 
 
 def extract_openai_llm_weather_features(text: str, model: str) -> dict[str, float | str]:
+    load_dotenv_if_present()
     try:
         from openai import OpenAI
         from pydantic import BaseModel, Field
@@ -665,6 +681,7 @@ def extract_openai_llm_weather_features(text: str, model: str) -> dict[str, floa
 
 
 def extract_chat_json_llm_weather_features(text: str, config: dict[str, str]) -> dict[str, float | str]:
+    load_dotenv_if_present()
     try:
         from openai import OpenAI
     except ImportError as exc:
@@ -1096,12 +1113,27 @@ def infer_processed_suffix(processed_dir: Path) -> str:
     )
     if not suffixes:
         raise FileNotFoundError(f"No {prefix}*.csv file found in {processed_dir}")
-    preferred = "2022-01-01_2026-01-01.csv"
+    preferred = "2023-01-01_2025-01-01.csv"
     if preferred in suffixes:
         return preferred
     if len(suffixes) == 1:
         return suffixes[0]
     raise ValueError(f"Multiple data suffixes found in {processed_dir}: {', '.join(suffixes)}")
+
+
+def make_train_test_masks(
+    frame: pd.DataFrame,
+    *,
+    train_end: str = "2024-01-01",
+    test_start: str = "2024-01-01",
+    test_end: str | None = None,
+) -> tuple[pd.Series, pd.Series]:
+    local_dates = frame["local_date"].astype(str)
+    train_mask = local_dates < train_end
+    test_mask = local_dates >= test_start
+    if test_end:
+        test_mask = test_mask & (local_dates < test_end)
+    return train_mask, test_mask
 
 
 def nws_text_paths_for_suffix(processed_dir: Path, text_suffix: str) -> list[Path]:
@@ -1477,10 +1509,22 @@ def _fit_predict_torch_sequence(
     return train_pred_full, test_pred
 
 
-def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, float]]:
+def fit_predict_models(
+    master: pd.DataFrame,
+    *,
+    train_end: str = "2024-01-01",
+    test_start: str = "2024-01-01",
+    test_end: str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, float | int | str]]:
     model_df = master.dropna(subset=["pv_mw_lag_24", "rt_lmp_lag_24"]).copy()
-    train = model_df[model_df["local_date"] < "2024-01-01"].copy()
-    test = model_df[model_df["local_date"] >= "2024-01-01"].copy()
+    train_mask, test_mask = make_train_test_masks(
+        model_df,
+        train_end=train_end,
+        test_start=test_start,
+        test_end=test_end,
+    )
+    train = model_df[train_mask].copy()
+    test = model_df[test_mask].copy()
     rated_capacity = float(model_df["pv_mw"].max())
     numeric_feature_cols = [col for col in feature_columns(model_df, text_group="none") if train[col].notna().any()]
     text_feature_cols = [col for col in feature_columns(model_df, text_group="rule") if train[col].notna().any()]
@@ -1571,7 +1615,7 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         train_residuals[f"rt_{name}_residual"] = train["rt_lmp"].to_numpy() - price_model.predict(train[feature_cols])
         preds[f"rt_{name}"] = price_model.predict(test[feature_cols])
 
-    validation_meta_extra: dict[str, float | str | int] = {}
+    validation_model_meta: dict[str, float | str | int] = {}
     if has_combined_features:
         validation_start = "2023-10-01"
 
@@ -1621,13 +1665,15 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
             upper=rated_capacity,
             rated_capacity=rated_capacity,
         )
-        train_residuals["pv_mlp_text_llm_validation_residual"] = train["pv_mw"].to_numpy() - pv_validation_train_pred
-        preds["pv_mlp_text_llm_validation"] = pv_validation_test_pred
-        validation_meta_extra.update(
+        train_residuals["pv_mlp_text_llm_validation_selected_residual"] = (
+            train["pv_mw"].to_numpy() - pv_validation_train_pred
+        )
+        preds["pv_mlp_text_llm_validation_selected"] = pv_validation_test_pred
+        validation_model_meta.update(
             {
-                "pv_mlp_text_llm_validation_candidate": pv_validation_meta["selected_candidate"],
-                "pv_mlp_text_llm_validation_rmse": pv_validation_meta["validation_rmse"],
-                "pv_mlp_text_llm_validation_feature_count": pv_validation_meta["selected_feature_count"],
+                "pv_mlp_text_llm_validation_selected_candidate": pv_validation_meta["selected_candidate"],
+                "pv_mlp_text_llm_validation_selected_rmse": pv_validation_meta["validation_rmse"],
+                "pv_mlp_text_llm_validation_selected_feature_count": pv_validation_meta["selected_feature_count"],
             }
         )
 
@@ -1638,13 +1684,15 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
             target_col="rt_lmp",
             validation_start=validation_start,
         )
-        train_residuals["rt_mlp_text_llm_validation_residual"] = train["rt_lmp"].to_numpy() - rt_validation_train_pred
-        preds["rt_mlp_text_llm_validation"] = rt_validation_test_pred
-        validation_meta_extra.update(
+        train_residuals["rt_mlp_text_llm_validation_selected_residual"] = (
+            train["rt_lmp"].to_numpy() - rt_validation_train_pred
+        )
+        preds["rt_mlp_text_llm_validation_selected"] = rt_validation_test_pred
+        validation_model_meta.update(
             {
-                "rt_mlp_text_llm_validation_candidate": rt_validation_meta["selected_candidate"],
-                "rt_mlp_text_llm_validation_rmse": rt_validation_meta["validation_rmse"],
-                "rt_mlp_text_llm_validation_feature_count": rt_validation_meta["selected_feature_count"],
+                "rt_mlp_text_llm_validation_selected_candidate": rt_validation_meta["selected_candidate"],
+                "rt_mlp_text_llm_validation_selected_rmse": rt_validation_meta["validation_rmse"],
+                "rt_mlp_text_llm_validation_selected_feature_count": rt_validation_meta["selected_feature_count"],
             }
         )
 
@@ -1677,8 +1725,6 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
     preds["rt_mlp_resid_text"] = rt_resid_test_pred
 
     torch_sequence_models = 0
-    train_mask = model_df["local_date"] < "2024-01-01"
-    test_mask = model_df["local_date"] >= "2024-01-01"
     for model_kind in ["lstm", "gru", "transformer"]:
         name = f"{model_kind}_text"
         try:
@@ -1835,8 +1881,13 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         "combined_feature_count": len(combined_feature_cols),
         "combined_text_feature_count": max(0, len(combined_feature_cols) - len(numeric_feature_cols)),
         "torch_sequence_models": torch_sequence_models,
+        "train_end": train_end,
+        "test_start": test_start,
+        "test_end": test_end or "",
+        "train_rows": int(train_mask.sum()),
+        "test_rows": int(test_mask.sum()),
     }
-    meta.update(validation_meta_extra)
+    meta.update(validation_model_meta)
     return preds, pd.DataFrame(metrics_rows), train_residuals, meta
 
 
@@ -1872,8 +1923,9 @@ def _make_named_tabular_model(model_name: str, target_col: str) -> object:
         if model_name == "mlp_llm_rule_cloud":
             return _mlp_model(
                 random_state=23 if target_col == "pv_mw" else 29,
-                alpha=1e-5,
-                learning_rate_init=1e-3,
+                alpha=1e-3,
+                learning_rate_init=5e-4,
+                max_iter=340,
             )
         if model_name == "mlp_rule_core":
             return _mlp_model(
@@ -1907,6 +1959,11 @@ def _sequence_epochs(model_kind: str, feature_group: str) -> int:
     return 20
 
 
+NAMED_SEQUENCE_OVERRIDES = {
+    "transformer_llm_rule": {"seq_len": 48, "hidden_size": 32, "epochs": 6},
+}
+
+
 def _fit_named_split_prediction(
     model_df: pd.DataFrame,
     train_mask: pd.Series,
@@ -1923,6 +1980,10 @@ def _fit_named_split_prediction(
 
     sequence_kind = _sequence_model_kind(model_name)
     if sequence_kind is not None:
+        sequence_kwargs = {
+            "epochs": _sequence_epochs(sequence_kind, feature_group),
+            **NAMED_SEQUENCE_OVERRIDES.get(model_name, {}),
+        }
         train_pred_full, eval_pred = _fit_predict_torch_sequence(
             model_df=model_df,
             train_mask=train_mask,
@@ -1931,7 +1992,7 @@ def _fit_named_split_prediction(
             target_col=target_col,
             model_kind=sequence_kind,
             random_state=_sequence_random_state(sequence_kind, feature_group, target_col),
-            epochs=_sequence_epochs(sequence_kind, feature_group),
+            **sequence_kwargs,
         )
     else:
         model = _make_named_tabular_model(model_name, target_col)
@@ -3086,6 +3147,16 @@ def _score_hybrid_blend_validation_summary(summary: pd.DataFrame, selection_obje
             _normalized_score(out["cvar_95_loss_max"], higher_is_better=False),
         ]
         out["validation_selection_score"] = np.mean(np.vstack(components), axis=0)
+    elif selection_objective == "balanced_revenue_cvar_imbalance":
+        components = [
+            _normalized_score(out["total_revenue_mean"], higher_is_better=True),
+            _normalized_score(out["total_revenue_min"], higher_is_better=True),
+            _normalized_score(out["cvar_95_loss_mean"], higher_is_better=False),
+            _normalized_score(out["cvar_95_loss_max"], higher_is_better=False),
+            _normalized_score(out["imbalance_mwh_proxy_mean"], higher_is_better=False),
+            _normalized_score(out["imbalance_mwh_proxy_max"], higher_is_better=False),
+        ]
+        out["validation_selection_score"] = np.mean(np.vstack(components), axis=0)
     else:
         raise ValueError(f"unknown selection_objective: {selection_objective}")
 
@@ -3338,14 +3409,14 @@ def build_ablation_summary(metrics: pd.DataFrame, bidding: pd.DataFrame) -> pd.D
         "pv",
         "all",
         "pv_mlp_text",
-        "pv_mlp_text_llm_validation",
+        "pv_mlp_text_llm_validation_selected",
     )
     add_lower_better(
         "validation_combined_vs_llm_mlp_pv_all",
         "pv",
         "all",
         "pv_mlp_llm",
-        "pv_mlp_text_llm_validation",
+        "pv_mlp_text_llm_validation_selected",
     )
     add_lower_better(
         "combined_vs_rule_transformer_rt_price_all",
@@ -3382,9 +3453,9 @@ def build_ablation_summary(metrics: pd.DataFrame, bidding: pd.DataFrame) -> pd.D
         "S18_mlp_text_llm_deterministic",
     )
     add_higher_better(
-        "bidding_mlp_text_llm_validation_vs_mlp_text",
+        "bidding_mlp_text_llm_validation_selected_vs_mlp_text",
         "S11_mlp_text_deterministic",
-        "S20_mlp_text_llm_validation_deterministic",
+        "S20_mlp_text_llm_validation_selected_deterministic",
     )
     add_higher_better("scenario_lp_vs_ridge_text_deterministic", "S4_ridge_text_deterministic", "S7_ridge_text_stochastic_LP")
     add_higher_better(
@@ -3481,7 +3552,7 @@ def bidding_backtest(preds: pd.DataFrame, rated_capacity: float, train_residuals
         ("S17_transformer_llm_deterministic", "pv_transformer_llm"),
         ("S18_mlp_text_llm_deterministic", "pv_mlp_text_llm"),
         ("S19_transformer_text_llm_deterministic", "pv_transformer_text_llm"),
-        ("S20_mlp_text_llm_validation_deterministic", "pv_mlp_text_llm_validation"),
+        ("S20_mlp_text_llm_validation_selected_deterministic", "pv_mlp_text_llm_validation_selected"),
     ]
     for strategy_name, pred_col in optional_deep_strategies:
         if pred_col in preds.columns:
@@ -3669,7 +3740,12 @@ def write_markdown_summary(
             "- `S7` solves a daily risk-neutral scenario LP; `S8`-`S10` add linear CVaR terms with increasing risk aversion.",
             "- Settlement uses a symmetric 50 $/MWh proxy deviation penalty to discourage virtual-arbitrage behavior in physical PV bids.",
             "- HRRR has a few source-missing rows, but model features use `status=ok` rows only.",
-            "- Price data availability starts in 2023-01, so bidding experiments use 2023 for training and 2024 for testing.",
+            (
+                "- Forecasting and bidding splits follow the audit dates: "
+                f"`train_end={audit.get('train_end')}`, `test_start={audit.get('test_start')}`, "
+                f"`test_end={audit.get('test_end')}`; price rows begin at `{audit.get('price_start_utc')}` "
+                "after required availability filtering."
+            ),
         ]
     )
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -3679,12 +3755,21 @@ def run(
     output_dir: Path = Path("results"),
     processed_dir: Path = Path("data/processed"),
     data_suffix: str | None = None,
+    train_end: str = "2024-01-01",
+    test_start: str = "2024-01-01",
+    test_end: str | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     master, audit = build_master_table(processed_dir, data_suffix=data_suffix)
-    master_path = processed_dir / "master_hourly_caiso_noaa_2023-01-19_2024-12-31.csv"
+    data_token = str(audit["data_suffix"]).removesuffix(".csv")
+    master_path = processed_dir / f"master_hourly_caiso_noaa_{data_token}.csv"
     master.to_csv(master_path, index=False)
-    preds, metrics, train_residuals, meta = fit_predict_models(master)
+    preds, metrics, train_residuals, meta = fit_predict_models(
+        master,
+        train_end=train_end,
+        test_start=test_start,
+        test_end=test_end,
+    )
     audit.update(meta)
     bidding = bidding_backtest(preds, rated_capacity=float(meta["rated_capacity_mw"]), train_residuals=train_residuals)
     scenario_quality = evaluate_scenario_quality(
@@ -3742,9 +3827,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run baseline CAISO/NOAA forecasting and bidding experiments.")
     parser.add_argument("--output", type=Path, default=Path("results"))
     parser.add_argument("--processed-dir", type=Path, default=Path("data/processed"))
-    parser.add_argument("--data-suffix", help="Processed data suffix such as 2022-01-01_2026-01-01.")
+    parser.add_argument("--data-suffix", help="Processed data suffix such as 2023-01-01_2025-01-01.")
+    parser.add_argument("--train-end", default="2024-01-01", help="Final model training end date, exclusive.")
+    parser.add_argument("--test-start", default="2024-01-01", help="Test start date, inclusive.")
+    parser.add_argument("--test-end", help="Optional test end date, exclusive.")
     args = parser.parse_args()
-    run(args.output, args.processed_dir, data_suffix=args.data_suffix)
+    run(
+        args.output,
+        args.processed_dir,
+        data_suffix=args.data_suffix,
+        train_end=args.train_end,
+        test_start=args.test_start,
+        test_end=args.test_end,
+    )
 
 
 if __name__ == "__main__":
