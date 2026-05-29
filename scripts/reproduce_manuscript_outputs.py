@@ -469,22 +469,21 @@ def plot_case_study() -> None:
     case_date = str(data["local_date"].dropna().iloc[0])
     event_text = str(data["event_types"].dropna().iloc[0]).replace("|", ", ")
 
-    fig, axes_grid = plt.subplots(2, 2, figsize=(7.25, 4.95), sharex=True)
-    axes = axes_grid.ravel()
-    axes[0].plot(hours, data["pv_mw"], color=OKABE_ITO["black"], lw=1.55, label="Actual PV")
-    axes[0].plot(hours, data["common_anchor_bid_mw"], color=OKABE_ITO["blue"], lw=1.25, ls="--", label="MLP no-text anchor")
+    fig, axes = plt.subplots(4, 1, figsize=(7.25, 7.45), sharex=True, gridspec_kw={"hspace": 0.30})
+    axes[0].plot(hours, data["pv_mw"], color=OKABE_ITO["black"], lw=1.8, label="Actual PV")
+    axes[0].plot(hours, data["common_anchor_bid_mw"], color=OKABE_ITO["blue"], lw=1.4, ls="--", label="MLP no-text anchor")
     axes[0].plot(
         hours,
         data["llm_common_anchor_hybrid_bid_mw"],
         color=OKABE_ITO["vermillion"],
-        lw=1.55,
+        lw=1.8,
         label="LLM LP-anchor hybrid (w=.25)",
     )
     axes[0].set_ylabel("PV or quantity (MW)")
     pv_top = float(data[["pv_mw", "common_anchor_bid_mw", "llm_common_anchor_hybrid_bid_mw"]].max().max())
-    axes[0].set_ylim(0.0, pv_top * 1.32)
+    axes[0].set_ylim(0.0, pv_top * 1.28)
     axes[0].set_title(f"{case_date}: {event_text}, common no-text anchor", loc="left", fontsize=9, pad=5)
-    axes[0].legend(frameon=False, ncol=1, loc="upper left", fontsize=6.5)
+    axes[0].legend(frameon=False, ncol=3, loc="upper left")
     risk_text = (
         f"Narrative: rule cloud/rain={float(data['wx_prior_cloud_score'].iloc[0]):.1f}/{float(data['wx_prior_rain_score'].iloc[0]):.1f}\n"
         f"LLM irradiance/conf.={float(data['llm_prior_irradiance_reduction_risk'].iloc[0]):.1f}/"
@@ -502,38 +501,38 @@ def plot_case_study() -> None:
         bbox={"boxstyle": "round,pad=0.15", "facecolor": "white", "edgecolor": "0.86", "linewidth": 0.3, "alpha": 0.88},
     )
 
-    axes[1].plot(hours, data["da_lmp"], color=OKABE_ITO["orange"], lw=1.35, label="Day-ahead price")
-    axes[1].plot(hours, data["rt_lmp"], color=OKABE_ITO["sky_blue"], lw=1.35, label="Real-time price")
+    axes[1].plot(hours, data["da_lmp"], color=OKABE_ITO["orange"], lw=1.6, label="Day-ahead price")
+    axes[1].plot(hours, data["rt_lmp"], color=OKABE_ITO["sky_blue"], lw=1.6, label="Real-time price")
     axes[1].fill_between(hours, data["da_lmp"].astype(float), data["rt_lmp"].astype(float), color="0.80", alpha=0.35, label="DA-RT spread")
     axes[1].set_ylabel("Price (USD/MWh)")
     price_min = float(data[["da_lmp", "rt_lmp"]].min().min())
     price_max = float(data[["da_lmp", "rt_lmp"]].max().max())
     price_span = max(price_max - price_min, 1.0)
     axes[1].set_ylim(price_min - 0.08 * price_span, price_max + 0.28 * price_span)
-    axes[1].legend(frameon=False, ncol=1, loc="upper left", fontsize=6.5)
+    axes[1].legend(frameon=False, ncol=3, loc="upper left")
 
-    axes[2].plot(hours, data["common_anchor_abs_imbalance_mw"], color=OKABE_ITO["blue"], lw=1.25, ls="--", label="MLP no-text anchor")
+    axes[2].plot(hours, data["common_anchor_abs_imbalance_mw"], color=OKABE_ITO["blue"], lw=1.4, ls="--", label="MLP no-text anchor")
     axes[2].plot(
         hours,
         data["llm_common_anchor_abs_imbalance_mw"],
         color=OKABE_ITO["vermillion"],
-        lw=1.55,
+        lw=1.8,
         label="LLM LP-anchor hybrid (w=.25)",
     )
     imb_top = float(data[["common_anchor_abs_imbalance_mw", "llm_common_anchor_abs_imbalance_mw"]].max().max())
     axes[2].set_ylim(0.0, imb_top * 1.24)
     axes[2].set_ylabel("Absolute imbalance (MW)")
-    axes[2].legend(frameon=False, ncol=1, loc="upper left", fontsize=6.5)
+    axes[2].legend(frameon=False, ncol=2, loc="upper left")
 
     delta_kusd = data["common_anchor_value_delta_usd"] / 1_000.0
     cumulative_kusd = data["common_anchor_cumulative_value_delta_usd"] / 1_000.0
     bar_colors = np.where(delta_kusd.to_numpy(dtype=float) >= 0.0, OKABE_ITO["bluish_green"], OKABE_ITO["vermillion"])
     axes[3].bar(hours, delta_kusd, color=bar_colors, alpha=0.84, label="Hourly value delta")
-    axes[3].plot(hours, cumulative_kusd, color=OKABE_ITO["black"], lw=1.35, marker="o", ms=2.6, label="Cumulative value delta")
+    axes[3].plot(hours, cumulative_kusd, color=OKABE_ITO["black"], lw=1.5, marker="o", ms=3, label="Cumulative value delta")
     axes[3].axhline(0.0, color="0.30", lw=0.8)
     axes[3].set_ylabel("Value delta\n(thousand USD)")
     axes[3].set_xlabel("Local hour")
-    axes[3].legend(frameon=False, ncol=1, loc="upper left", fontsize=6.5)
+    axes[3].legend(frameon=False, ncol=2, loc="upper left")
     final_delta = float(cumulative_kusd.iloc[-1])
     lower = float(min(delta_kusd.min(), cumulative_kusd.min(), 0.0))
     upper = float(max(delta_kusd.max(), cumulative_kusd.max(), 0.0))
@@ -545,11 +544,9 @@ def plot_case_study() -> None:
         ax.axvspan(6, 19, color=OKABE_ITO["yellow"], alpha=0.08, zorder=0)
         ax.text(-0.055, 1.02, chr(ord("a") + idx), transform=ax.transAxes, fontsize=10, fontweight="bold", va="bottom", ha="left")
         ax.grid(True, alpha=0.18)
-        ax.set_xticks(np.arange(0, 24, 4))
-        ax.set_xlim(-0.5, 24.8)
-    axes[2].set_xlabel("Local hour")
-    axes[3].set_xlabel("Local hour")
-    fig.subplots_adjust(top=0.91, left=0.095, right=0.985, bottom=0.105, hspace=0.34, wspace=0.28)
+    axes[-1].set_xticks(np.arange(0, 24, 2))
+    axes[-1].set_xlim(-0.5, 24.8)
+    fig.subplots_adjust(top=0.925, left=0.14, right=0.985, bottom=0.075)
     save_figure(fig, "fig_selected_cloud_rule_case_2025_03_07")
 
 
