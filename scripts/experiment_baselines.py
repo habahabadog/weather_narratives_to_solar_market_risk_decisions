@@ -1096,7 +1096,7 @@ def infer_processed_suffix(processed_dir: Path) -> str:
     )
     if not suffixes:
         raise FileNotFoundError(f"No {prefix}*.csv file found in {processed_dir}")
-    preferred = "2023-01-01_2025-01-01.csv"
+    preferred = "2022-01-01_2026-01-01.csv"
     if preferred in suffixes:
         return preferred
     if len(suffixes) == 1:
@@ -1571,11 +1571,11 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         train_residuals[f"rt_{name}_residual"] = train["rt_lmp"].to_numpy() - price_model.predict(train[feature_cols])
         preds[f"rt_{name}"] = price_model.predict(test[feature_cols])
 
-    tuned_meta: dict[str, float | str | int] = {}
+    validation_meta_extra: dict[str, float | str | int] = {}
     if has_combined_features:
         validation_start = "2023-10-01"
 
-        def make_tuned_candidates(seed: int) -> list[dict[str, object]]:
+        def make_validation_candidates(seed: int) -> list[dict[str, object]]:
             return [
                 {
                     "name": "rule_default",
@@ -1611,40 +1611,40 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
                 },
             ]
 
-        pv_tuned_train_pred, pv_tuned_test_pred, pv_tuned_meta = fit_best_model_by_validation(
+        pv_validation_train_pred, pv_validation_test_pred, pv_validation_meta = fit_best_model_by_validation(
             train=train,
             test=test,
-            candidates=make_tuned_candidates(41),
+            candidates=make_validation_candidates(41),
             target_col="pv_mw",
             validation_start=validation_start,
             lower=0.0,
             upper=rated_capacity,
             rated_capacity=rated_capacity,
         )
-        train_residuals["pv_mlp_text_llm_tuned_residual"] = train["pv_mw"].to_numpy() - pv_tuned_train_pred
-        preds["pv_mlp_text_llm_tuned"] = pv_tuned_test_pred
-        tuned_meta.update(
+        train_residuals["pv_mlp_text_llm_validation_residual"] = train["pv_mw"].to_numpy() - pv_validation_train_pred
+        preds["pv_mlp_text_llm_validation"] = pv_validation_test_pred
+        validation_meta_extra.update(
             {
-                "pv_mlp_text_llm_tuned_candidate": pv_tuned_meta["selected_candidate"],
-                "pv_mlp_text_llm_tuned_validation_rmse": pv_tuned_meta["validation_rmse"],
-                "pv_mlp_text_llm_tuned_feature_count": pv_tuned_meta["selected_feature_count"],
+                "pv_mlp_text_llm_validation_candidate": pv_validation_meta["selected_candidate"],
+                "pv_mlp_text_llm_validation_rmse": pv_validation_meta["validation_rmse"],
+                "pv_mlp_text_llm_validation_feature_count": pv_validation_meta["selected_feature_count"],
             }
         )
 
-        rt_tuned_train_pred, rt_tuned_test_pred, rt_tuned_meta = fit_best_model_by_validation(
+        rt_validation_train_pred, rt_validation_test_pred, rt_validation_meta = fit_best_model_by_validation(
             train=train,
             test=test,
-            candidates=make_tuned_candidates(43),
+            candidates=make_validation_candidates(43),
             target_col="rt_lmp",
             validation_start=validation_start,
         )
-        train_residuals["rt_mlp_text_llm_tuned_residual"] = train["rt_lmp"].to_numpy() - rt_tuned_train_pred
-        preds["rt_mlp_text_llm_tuned"] = rt_tuned_test_pred
-        tuned_meta.update(
+        train_residuals["rt_mlp_text_llm_validation_residual"] = train["rt_lmp"].to_numpy() - rt_validation_train_pred
+        preds["rt_mlp_text_llm_validation"] = rt_validation_test_pred
+        validation_meta_extra.update(
             {
-                "rt_mlp_text_llm_tuned_candidate": rt_tuned_meta["selected_candidate"],
-                "rt_mlp_text_llm_tuned_validation_rmse": rt_tuned_meta["validation_rmse"],
-                "rt_mlp_text_llm_tuned_feature_count": rt_tuned_meta["selected_feature_count"],
+                "rt_mlp_text_llm_validation_candidate": rt_validation_meta["selected_candidate"],
+                "rt_mlp_text_llm_validation_rmse": rt_validation_meta["validation_rmse"],
+                "rt_mlp_text_llm_validation_feature_count": rt_validation_meta["selected_feature_count"],
             }
         )
 
@@ -1836,7 +1836,7 @@ def fit_predict_models(master: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame
         "combined_text_feature_count": max(0, len(combined_feature_cols) - len(numeric_feature_cols)),
         "torch_sequence_models": torch_sequence_models,
     }
-    meta.update(tuned_meta)
+    meta.update(validation_meta_extra)
     return preds, pd.DataFrame(metrics_rows), train_residuals, meta
 
 
@@ -3334,18 +3334,18 @@ def build_ablation_summary(metrics: pd.DataFrame, bidding: pd.DataFrame) -> pd.D
     add_lower_better("combined_vs_rule_mlp_pv_all", "pv", "all", "pv_mlp_text", "pv_mlp_text_llm")
     add_lower_better("combined_vs_llm_mlp_pv_all", "pv", "all", "pv_mlp_llm", "pv_mlp_text_llm")
     add_lower_better(
-        "tuned_combined_vs_rule_mlp_pv_all",
+        "validation_combined_vs_rule_mlp_pv_all",
         "pv",
         "all",
         "pv_mlp_text",
-        "pv_mlp_text_llm_tuned",
+        "pv_mlp_text_llm_validation",
     )
     add_lower_better(
-        "tuned_combined_vs_llm_mlp_pv_all",
+        "validation_combined_vs_llm_mlp_pv_all",
         "pv",
         "all",
         "pv_mlp_llm",
-        "pv_mlp_text_llm_tuned",
+        "pv_mlp_text_llm_validation",
     )
     add_lower_better(
         "combined_vs_rule_transformer_rt_price_all",
@@ -3382,9 +3382,9 @@ def build_ablation_summary(metrics: pd.DataFrame, bidding: pd.DataFrame) -> pd.D
         "S18_mlp_text_llm_deterministic",
     )
     add_higher_better(
-        "bidding_mlp_text_llm_tuned_vs_mlp_text",
+        "bidding_mlp_text_llm_validation_vs_mlp_text",
         "S11_mlp_text_deterministic",
-        "S20_mlp_text_llm_tuned_deterministic",
+        "S20_mlp_text_llm_validation_deterministic",
     )
     add_higher_better("scenario_lp_vs_ridge_text_deterministic", "S4_ridge_text_deterministic", "S7_ridge_text_stochastic_LP")
     add_higher_better(
@@ -3481,7 +3481,7 @@ def bidding_backtest(preds: pd.DataFrame, rated_capacity: float, train_residuals
         ("S17_transformer_llm_deterministic", "pv_transformer_llm"),
         ("S18_mlp_text_llm_deterministic", "pv_mlp_text_llm"),
         ("S19_transformer_text_llm_deterministic", "pv_transformer_text_llm"),
-        ("S20_mlp_text_llm_tuned_deterministic", "pv_mlp_text_llm_tuned"),
+        ("S20_mlp_text_llm_validation_deterministic", "pv_mlp_text_llm_validation"),
     ]
     for strategy_name, pred_col in optional_deep_strategies:
         if pred_col in preds.columns:
@@ -3668,7 +3668,7 @@ def write_markdown_summary(
             "- If `nws_llm_feature_source=heuristic_structured_proxy`, the LLM columns are an offline structured proxy, not paid/API model outputs.",
             "- `S7` solves a daily risk-neutral scenario LP; `S8`-`S10` add linear CVaR terms with increasing risk aversion.",
             "- Settlement uses a symmetric 50 $/MWh proxy deviation penalty to discourage virtual-arbitrage behavior in physical PV bids.",
-            "- HRRR has a few retained source-missing rows, but model features use `status=ok` rows only.",
+            "- HRRR has a few source-missing rows, but model features use `status=ok` rows only.",
             "- Price data availability starts in 2023-01, so bidding experiments use 2023 for training and 2024 for testing.",
         ]
     )
@@ -3742,7 +3742,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run baseline CAISO/NOAA forecasting and bidding experiments.")
     parser.add_argument("--output", type=Path, default=Path("results"))
     parser.add_argument("--processed-dir", type=Path, default=Path("data/processed"))
-    parser.add_argument("--data-suffix", help="Processed data suffix such as 2023-01-01_2025-01-01.")
+    parser.add_argument("--data-suffix", help="Processed data suffix such as 2022-01-01_2026-01-01.")
     args = parser.parse_args()
     run(args.output, args.processed_dir, data_suffix=args.data_suffix)
 

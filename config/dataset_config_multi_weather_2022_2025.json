@@ -1,7 +1,7 @@
 {
   "time_range": {
-    "start_date": "2023-01-01",
-    "end_date": "2025-01-01",
+    "start_date": "2022-01-01",
+    "end_date": "2026-01-01",
     "date_semantics": "start inclusive, end exclusive, California local dates"
   },
   "region": {
@@ -97,8 +97,7 @@
       "items": [
         "fuelsource",
         "demand",
-        "netdemand",
-        "wind_solar_wo_hybrids"
+        "netdemand"
       ]
     },
     "nws_text": {
@@ -138,6 +137,6 @@
     "timeout_seconds": 180,
     "sleep_seconds": 1,
     "retries": 5,
-    "user_agent": "scireport-caiso-noaa-downloader/0.1 (multi-weather 2023-2024 trial)"
+    "user_agent": "scireport-caiso-noaa-downloader/0.1 (multi-weather 2022-2025 four-year extension)"
   }
 }

@@ -1,0 +1,8 @@
+comparison_label,metric,mean_delta,mean_improvement_pct,ci95_low,ci95_high,improved_seed_count,seed_count,paired_t_p_value
+PV LLM cloud-rule vs no-text,mae,18.328496,2.875838,7.669395,28.987596,5,5,0.008813
+PV LLM cloud-rule vs no-text,rmse,18.686782,1.568713,5.45977,31.913795,5,5,0.017212
+PV LLM cloud-rule vs rule-core,mae,53.731589,8.013901,40.420192,67.042987,5,5,0.000361
+PV LLM cloud-rule vs rule-core,rmse,53.743697,4.393359,38.239683,69.247712,5,5,0.000652
+RT LLM-rule vs no-text,mae,0.265083,2.417796,0.020141,0.510025,5,5,0.039756
+RT LLM-rule vs no-text,rmse,0.330213,1.786029,-0.004078,0.664504,5,5,0.051768
+RT LLM-rule vs rule-text,rmse,0.532301,2.873934,0.000518,1.064085,4,5,0.049862

@@ -1,6 +1,4 @@
-comparison,strategy,scenario_source,lp_weight,value_musd,cvar95_loss_kusd_h,imbalance_gwh,value_delta_musd_vs_rule,cvar_delta_kusd_h_vs_rule,imbalance_delta_gwh_vs_rule,seed_count
-validation_selected,Rule-core hybrid blend,PV MLP rule-core + RT Transformer rule-text,0.75,383.1252468035151,565.2600478100217,6368.60150064612,0.0,0.0,0.0,10
-validation_selected,Pure LLM cloud-rule LP,PV MLP LLM rule-cloud + RT Transformer LLM-rule,1.0,379.44962004632197,603.9873829954308,7023.356069811133,-3.675626757193129,-38.727335185409174,-654.754569165013,10
-validation_selected,LLM cloud-rule hybrid blend,PV MLP LLM rule-cloud + RT Transformer LLM-rule,0.5,385.3622197755867,535.8337624677723,5781.207238894736,2.2369729720716123,29.426285342249344,587.394261751384,10
-fixed_w_0.50,Rule-core hybrid blend,PV MLP rule-core + RT Transformer rule-text,0.5,383.99117741503915,534.1877360238824,5795.765675535288,0.0,0.0,0.0,10
-fixed_w_0.50,LLM cloud-rule hybrid blend,PV MLP LLM rule-cloud + RT Transformer LLM-rule,0.5,385.3622197755867,535.8337624677723,5781.207238894736,1.3710423605475626,-1.646026443889923,14.558436640551918,10
+strategy,lp_weight,seed_count,value_musd,cvar95_loss_kusd_h,imbalance_gwh,value_delta_musd_vs_rule,cvar_delta_kusd_h_vs_rule,imbalance_delta_gwh_vs_rule
+Rule-core hybrid blend,0.5,10,834.311628,474.498103,13161.539121,0.0,0.0,0.0
+Pure LLM cloud-rule LP,1.0,10,888.156408,503.500667,13436.333474,53.84478,-29.002564,-274.794353
+LLM cloud-rule hybrid blend,0.5,10,877.827365,468.74934,12349.817086,43.515737,5.748762,811.722036

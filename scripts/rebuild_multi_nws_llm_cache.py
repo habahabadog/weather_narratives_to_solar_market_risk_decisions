@@ -103,9 +103,9 @@ def rebuild_multi_cache(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Rebuild and aggregate multi-office NWS LLM weather caches.")
-    parser.add_argument("--raw-nws-dir", type=Path, default=Path("data_multi_weather_2023_2024/raw/nws_text"))
-    parser.add_argument("--processed-dir", type=Path, default=Path("data_multi_weather_2023_2024/processed"))
-    parser.add_argument("--suffix", default="2023-01-01_2025-01-01")
+    parser.add_argument("--raw-nws-dir", type=Path, default=Path("data_multi_weather_2022_2025/raw/nws_text"))
+    parser.add_argument("--processed-dir", type=Path, default=Path("data_multi_weather_2022_2025/processed"))
+    parser.add_argument("--suffix", default="2022-01-01_2026-01-01")
     parser.add_argument("--pils", default=",".join(DEFAULT_PILS))
     parser.add_argument("--provider", default="deepseek", choices=["deepseek", "openai"])
     parser.add_argument("--model", default="")

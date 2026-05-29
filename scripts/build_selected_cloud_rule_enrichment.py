@@ -51,6 +51,20 @@ def _markdown_table(frame: pd.DataFrame, columns: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _read_downstream_artifact(results_dir: Path, date_tag: str, artifact: str) -> pd.DataFrame:
+    candidates = [
+        results_dir / f"selected_cloud_rule_downstream_{date_tag}_{artifact}.csv",
+        results_dir / f"selected_cloud_rule_downstream_{artifact}_{date_tag}.csv",
+    ]
+    for path in candidates:
+        if path.exists():
+            return pd.read_csv(path)
+    raise FileNotFoundError(
+        "missing downstream artifact "
+        f"{artifact!r}; checked {', '.join(str(path) for path in candidates)}"
+    )
+
+
 def _forecast_slice_masks(preds: pd.DataFrame) -> dict[str, pd.Series]:
     masks: dict[str, pd.Series] = {
         "All test hours": pd.Series(True, index=preds.index),
@@ -275,7 +289,7 @@ def plot_paired_seed_effects(seed_deltas: pd.DataFrame, seed_summary: pd.DataFra
         ax.text(
             0.98,
             0.93,
-            f"{int(np.sum(values > 0))}/{len(values)} positive",
+            f"{int(np.sum(values > 0))}/{len(values)} improved",
             transform=ax.transAxes,
             fontsize=7.4,
             ha="right",
@@ -354,7 +368,7 @@ def plot_selected_value_cvar_tradeoff(summary: pd.DataFrame, output_dir: Path) -
             bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "edgecolor": "0.82", "linewidth": 0.6},
         )
     ax.set_xlabel("CVaR95 loss (k USD/h, lower is better)")
-    ax.set_ylabel("Annual proxy value (M USD, higher is better)")
+    ax.set_ylabel("Test-period proxy value (M USD, higher is better)")
     ax.grid(True, alpha=0.18)
     ax.set_xlim(float(data["cvar95_loss_kusd_h"].min()) - 10, float(data["cvar95_loss_kusd_h"].max()) + 13)
     ax.set_ylim(float(data["value_musd"].min()) - 2.5, float(data["value_musd"].max()) + 2.2)
@@ -441,7 +455,7 @@ def plot_selected_case_study(case_data: pd.DataFrame, output_dir: Path, case_dat
     save_figure(fig, output_dir, f"fig_selected_cloud_rule_case_{case_date.replace('-', '_')}")
 
 
-def screen_case_days(preds: pd.DataFrame, hybrid_bid: pd.Series) -> pd.DataFrame:
+def build_event_day_examples(preds: pd.DataFrame, hybrid_bid: pd.Series) -> pd.DataFrame:
     x = preds.copy()
     x["hybrid_bid_mw"] = hybrid_bid
     rows: list[dict[str, object]] = []
@@ -470,31 +484,38 @@ def screen_case_days(preds: pd.DataFrame, hybrid_bid: pd.Series) -> pd.DataFrame
     return pd.DataFrame(rows)
 
 
-def select_case_date(case_screen: pd.DataFrame, requested_case_date: str) -> str:
-    if requested_case_date.lower() != "auto":
-        return requested_case_date
-    clean = case_screen[
-        (case_screen["has_extreme_event"].eq(1))
-        & (case_screen["value_delta_kusd"].gt(0.0))
-        & (case_screen["absolute_imbalance_reduction_mwh"].gt(0.0))
-        & (case_screen["pv_rmse_improvement_pct"].gt(0.0))
+def select_case_date(event_days: pd.DataFrame, case_date_arg: str) -> str:
+    if case_date_arg.lower() != "auto":
+        return case_date_arg
+    eligible = event_days[
+        (event_days["has_extreme_event"].eq(1))
+        & (event_days["value_delta_kusd"].gt(0.0))
+        & (event_days["absolute_imbalance_reduction_mwh"].gt(0.0))
+        & (event_days["pv_rmse_improvement_pct"].gt(0.0))
     ].copy()
-    if clean.empty:
-        clean = case_screen[
-            (case_screen["has_extreme_event"].eq(1))
-            & (case_screen["value_delta_kusd"].gt(0.0))
-            & (case_screen["absolute_imbalance_reduction_mwh"].gt(0.0))
+    if eligible.empty:
+        eligible = event_days[
+            (event_days["has_extreme_event"].eq(1))
+            & (event_days["value_delta_kusd"].gt(0.0))
+            & (event_days["absolute_imbalance_reduction_mwh"].gt(0.0))
         ].copy()
-    if clean.empty:
-        raise ValueError("no positive extreme-weather case found for selected cloud-rule hybrid")
-    clean = clean.sort_values(["value_delta_kusd", "absolute_imbalance_reduction_mwh"], ascending=False)
-    return str(clean.iloc[0]["local_date"])
+    if eligible.empty:
+        raise ValueError("no eligible extreme-weather case found for selected cloud-rule hybrid")
+    eligible = eligible.sort_values(["value_delta_kusd", "absolute_imbalance_reduction_mwh"], ascending=False)
+    return str(eligible.iloc[0]["local_date"])
 
 
-def build_case_study(results_dir: Path, output_dir: Path, case_date: str, date_tag: str) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-    preds = pd.read_csv(results_dir / "test_predictions.csv")
-    train_residuals = pd.read_csv(results_dir / "train_residuals.csv")
-    audit = pd.read_csv(results_dir / "data_audit.csv")
+def build_case_study(
+    results_dir: Path,
+    output_dir: Path,
+    case_date: str,
+    date_tag: str,
+    forecast_dir: Path | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    forecast_source = forecast_dir or results_dir
+    preds = pd.read_csv(forecast_source / "test_predictions.csv")
+    train_residuals = pd.read_csv(forecast_source / "train_residuals.csv")
+    audit = pd.read_csv(forecast_source / "data_audit.csv")
     rated_capacity = float(audit.iloc[0]["rated_capacity_mw"])
     hybrid_bid = reconstruct_hybrid_blend_bid_series(
         preds=preds,
@@ -510,11 +531,11 @@ def build_case_study(results_dir: Path, output_dir: Path, case_date: str, date_t
         deviation_penalty=50.0,
         scenario_count=20,
     )
-    case_screen = screen_case_days(preds, hybrid_bid)
+    event_days = build_event_day_examples(preds, hybrid_bid)
     case_dir = output_dir / "case_study"
     case_dir.mkdir(parents=True, exist_ok=True)
-    case_screen.to_csv(case_dir / f"selected_cloud_rule_case_screening_{date_tag}.csv", index=False)
-    selected_case_date = select_case_date(case_screen, case_date)
+    event_days.to_csv(case_dir / f"selected_cloud_rule_event_day_examples_{date_tag}.csv", index=False)
+    selected_case_date = select_case_date(event_days, case_date)
 
     case_mask = preds["local_date"].astype(str).eq(selected_case_date)
     if not bool(case_mask.any()):
@@ -528,7 +549,7 @@ def build_case_study(results_dir: Path, output_dir: Path, case_date: str, date_t
     figure_dir = output_dir / "figures"
     case_data.to_csv(case_dir / f"selected_cloud_rule_case_{selected_case_date.replace('-', '_')}_data_{date_tag}.csv", index=False)
     plot_selected_case_study(case_data, figure_dir, selected_case_date)
-    return case_data, case_screen, selected_case_date
+    return case_data, event_days, selected_case_date
 
 
 def write_summary(
@@ -537,7 +558,7 @@ def write_summary(
     slice_metrics: pd.DataFrame,
     weight_table: pd.DataFrame,
     case_data: pd.DataFrame,
-    case_screen: pd.DataFrame,
+    event_days: pd.DataFrame,
     case_date: str,
 ) -> None:
     all_pv = slice_metrics[(slice_metrics["slice"].eq("All test hours")) & (slice_metrics["target"].eq("PV generation"))].iloc[0]
@@ -547,7 +568,7 @@ def write_summary(
     case_imbalance_delta = (
         float(case_data["anchor_abs_imbalance_mw"].sum()) - float(case_data["llm_abs_imbalance_mw"].sum())
     )
-    selected_case_screen = case_screen[case_screen["local_date"].astype(str).eq(case_date)].iloc[0]
+    selected_event_day = event_days[event_days["local_date"].astype(str).eq(case_date)].iloc[0]
     lines = [
         "# Selected Cloud-Rule Enrichment Results",
         "",
@@ -567,46 +588,54 @@ def write_summary(
         "## Extreme-weather case study",
         "",
         f"- Case date: {case_date}.",
-        f"- Event labels: {selected_case_screen['event_types']}.",
-        f"- PV RMSE improvement on this day: {float(selected_case_screen['pv_rmse_improvement_pct']):.3f}%.",
+        f"- Event labels: {selected_event_day['event_types']}.",
+        f"- PV RMSE improvement on this day: {float(selected_event_day['pv_rmse_improvement_pct']):.3f}%.",
         f"- LLM cloud-rule hybrid cumulative value delta on this day: {total_case_delta:.3f}k USD.",
         f"- Absolute-imbalance reduction on this day: {case_imbalance_delta:.3f}MWh.",
         f"- Figure: `figures/fig_selected_cloud_rule_case_{case_date.replace('-', '_')}.pdf` and `.png`.",
         f"- Data: `case_study/selected_cloud_rule_case_{case_date.replace('-', '_')}_data_{date_tag}.csv`.",
-        f"- Screening table: `case_study/selected_cloud_rule_case_screening_{date_tag}.csv`.",
+        f"- Event-day table: `case_study/selected_cloud_rule_event_day_examples_{date_tag}.csv`.",
         "",
     ]
     (output_dir / f"selected_cloud_rule_extra_results_{date_tag}.md").write_text("\n".join(lines), encoding="utf-8")
 
 
-def build_enrichment(results_dir: Path, case_date: str, date_tag: str) -> None:
+def build_enrichment(results_dir: Path, case_date: str, date_tag: str, forecast_dir: Path | None = None) -> None:
     apply_publication_style()
     output_dir = results_dir
     figure_dir = output_dir / "figures"
-    preds = pd.read_csv(results_dir / "test_predictions.csv")
+    forecast_source = forecast_dir or results_dir
+    preds = pd.read_csv(forecast_source / "test_predictions.csv")
     slice_metrics = build_forecast_slice_metrics(preds)
     write_forecast_slice_report(slice_metrics, output_dir, date_tag)
     plot_forecast_slice_metrics(slice_metrics, figure_dir)
 
-    weight_table = pd.read_csv(results_dir / f"selected_cloud_rule_downstream_weight_sensitivity_{date_tag}.csv")
+    weight_table = _read_downstream_artifact(results_dir, date_tag, "weight_sensitivity")
     plot_decision_sensitivity(weight_table, figure_dir)
-    seed_deltas = pd.read_csv(results_dir / f"selected_cloud_rule_downstream_paired_seed_deltas_{date_tag}.csv")
-    seed_summary = pd.read_csv(results_dir / f"selected_cloud_rule_downstream_paired_seed_summary_{date_tag}.csv")
+    seed_deltas = _read_downstream_artifact(results_dir, date_tag, "paired_seed_deltas")
+    seed_summary = _read_downstream_artifact(results_dir, date_tag, "paired_seed_summary")
     plot_paired_seed_effects(seed_deltas, seed_summary, figure_dir)
-    downstream_summary = pd.read_csv(results_dir / f"selected_cloud_rule_downstream_summary_{date_tag}.csv")
+    downstream_summary = _read_downstream_artifact(results_dir, date_tag, "summary")
     plot_selected_value_cvar_tradeoff(downstream_summary, figure_dir)
 
-    case_data, case_screen, selected_case_date = build_case_study(results_dir, output_dir, case_date, date_tag)
-    write_summary(output_dir, date_tag, slice_metrics, weight_table, case_data, case_screen, selected_case_date)
+    case_data, event_days, selected_case_date = build_case_study(
+        results_dir,
+        output_dir,
+        case_date,
+        date_tag,
+        forecast_dir=forecast_source,
+    )
+    write_summary(output_dir, date_tag, slice_metrics, weight_table, case_data, event_days, selected_case_date)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build selected cloud-rule enrichment tables and figures.")
     parser.add_argument("--results-dir", type=Path, default=Path("results/selected_cloud_rule_downstream_20260527"))
+    parser.add_argument("--forecast-dir", type=Path, help="Directory containing test_predictions.csv, train_residuals.csv, and data_audit.csv.")
     parser.add_argument("--case-date", default="auto")
     parser.add_argument("--date-tag", default="20260527")
     args = parser.parse_args()
-    build_enrichment(args.results_dir, args.case_date, args.date_tag)
+    build_enrichment(args.results_dir, args.case_date, args.date_tag, forecast_dir=args.forecast_dir)
 
 
 if __name__ == "__main__":

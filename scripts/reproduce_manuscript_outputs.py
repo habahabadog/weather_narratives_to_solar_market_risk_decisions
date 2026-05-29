@@ -26,7 +26,6 @@ OKABE_ITO = {
     "yellow": "#F0E442",
     "blue": "#0072B2",
     "vermillion": "#D55E00",
-    "reddish_purple": "#CC79A7",
     "black": "#000000",
 }
 
@@ -64,77 +63,90 @@ def copy_pipeline_overview() -> None:
         shutil.copy2(source, FIGURES / "fig_pipeline_method_overview.png")
 
 
-def metric_value(matrix: pd.DataFrame, target: str, model: str, metric: str, column: str) -> float:
-    row = matrix[
-        matrix["target"].eq(target)
-        & matrix["model"].eq(model)
-        & matrix["metric"].eq(metric)
-    ]
-    if row.empty:
-        raise ValueError(f"Missing metric row: {target} {model} {metric}")
-    return float(row.iloc[0][column])
+def reset_outputs() -> None:
+    for path in (TABLES, FIGURES):
+        if path.exists():
+            shutil.rmtree(path)
 
 
-def build_main_forecast_table(matrix: pd.DataFrame) -> pd.DataFrame:
-    rows = [
+def build_main_forecast_table(summary: pd.DataFrame) -> pd.DataFrame:
+    out = summary[
+        [
+            "target",
+            "model",
+            "feature_role",
+            "seed_count",
+            "rmse_mean",
+            "rmse_sd",
+            "mae_mean",
+            "mae_sd",
+        ]
+    ].rename(
+        columns={
+            "target": "Target",
+            "model": "Model",
+            "feature_role": "Feature role",
+            "seed_count": "Seeds",
+            "rmse_mean": "RMSE mean",
+            "rmse_sd": "RMSE SD",
+            "mae_mean": "MAE mean",
+            "mae_sd": "MAE SD",
+        }
+    )
+    return out.round({"RMSE mean": 2, "RMSE SD": 2, "MAE mean": 2, "MAE SD": 2})
+
+
+def build_forecast_seed_table(seed_summary: pd.DataFrame) -> pd.DataFrame:
+    keep = seed_summary[~seed_summary["comparison_label"].eq("RT LLM-rule vs rule-text") | ~seed_summary["metric"].eq("mae")]
+    out = keep[
+        [
+            "comparison_label",
+            "metric",
+            "mean_delta",
+            "mean_improvement_pct",
+            "ci95_low",
+            "ci95_high",
+            "improved_seed_count",
+            "seed_count",
+            "paired_t_p_value",
+        ]
+    ].rename(
+        columns={
+            "comparison_label": "Comparison",
+            "metric": "Metric",
+            "mean_delta": "Mean improvement",
+            "mean_improvement_pct": "Mean improvement (%)",
+            "ci95_low": "95% CI low",
+            "ci95_high": "95% CI high",
+            "improved_seed_count": "Improved seeds",
+            "seed_count": "Seeds",
+            "paired_t_p_value": "Paired t-test p",
+        }
+    )
+    return out.round(
         {
-            "Target": "PV",
-            "Model": "MLP",
-            "Feature role": "No text",
-            "RMSE": metric_value(matrix, "PV", "MLP", "RMSE", "no_text_test"),
-            "MAE": metric_value(matrix, "PV", "MLP", "MAE", "no_text_test"),
-        },
-        {
-            "Target": "PV",
-            "Model": "MLP",
-            "Feature role": "Rule-core text features",
-            "RMSE": metric_value(matrix, "PV", "MLP", "RMSE", "rule_test"),
-            "MAE": metric_value(matrix, "PV", "MLP", "MAE", "rule_test"),
-        },
-        {
-            "Target": "PV",
-            "Model": "MLP",
-            "Feature role": "Selected LLM cloud-rule feature",
-            "RMSE": metric_value(matrix, "PV", "MLP", "RMSE", "llm_test"),
-            "MAE": metric_value(matrix, "PV", "MLP", "MAE", "llm_test"),
-        },
-        {
-            "Target": "RT price",
-            "Model": "Transformer",
-            "Feature role": "No text",
-            "RMSE": metric_value(matrix, "RT price", "Transformer", "RMSE", "no_text_test"),
-            "MAE": metric_value(matrix, "RT price", "Transformer", "MAE", "no_text_test"),
-        },
-        {
-            "Target": "RT price",
-            "Model": "Transformer",
-            "Feature role": "Rule-text weather scores",
-            "RMSE": metric_value(matrix, "RT price", "Transformer", "RMSE", "rule_test"),
-            "MAE": metric_value(matrix, "RT price", "Transformer", "MAE", "rule_test"),
-        },
-        {
-            "Target": "RT price",
-            "Model": "Transformer",
-            "Feature role": "LLM rule-equivalent weather scores",
-            "RMSE": metric_value(matrix, "RT price", "Transformer", "RMSE", "llm_test"),
-            "MAE": metric_value(matrix, "RT price", "Transformer", "MAE", "llm_test"),
-        },
-    ]
-    return pd.DataFrame(rows).round({"RMSE": 2, "MAE": 2})
+            "Mean improvement": 3,
+            "Mean improvement (%)": 3,
+            "95% CI low": 3,
+            "95% CI high": 3,
+            "Paired t-test p": 4,
+        }
+    )
 
 
 def build_decision_table(summary: pd.DataFrame) -> pd.DataFrame:
-    data = summary[summary["comparison"].eq("validation_selected")].copy()
     labels = {
         "Rule-core hybrid blend": "Rule-core hybrid reference",
         "Pure LLM cloud-rule LP": "Pure LLM cloud-rule LP",
         "LLM cloud-rule hybrid blend": "LLM cloud-rule hybrid",
     }
+    data = summary.copy()
     data["Strategy"] = data["strategy"].map(labels).fillna(data["strategy"])
     out = data[
         [
             "Strategy",
             "lp_weight",
+            "seed_count",
             "value_musd",
             "cvar95_loss_kusd_h",
             "imbalance_gwh",
@@ -145,6 +157,7 @@ def build_decision_table(summary: pd.DataFrame) -> pd.DataFrame:
     ].rename(
         columns={
             "lp_weight": "w",
+            "seed_count": "Seeds",
             "value_musd": "Value (M USD)",
             "cvar95_loss_kusd_h": "CVaR95 loss (k USD/h)",
             "imbalance_gwh": "Imbalance (GWh)",
@@ -166,15 +179,8 @@ def build_decision_table(summary: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def build_case_screening_table(case_screen: pd.DataFrame) -> pd.DataFrame:
-    data = case_screen[
-        case_screen["has_extreme_event"].eq(1)
-        & case_screen["value_delta_kusd"].gt(0)
-        & case_screen["absolute_imbalance_reduction_mwh"].gt(0)
-        & case_screen["pv_rmse_improvement_pct"].gt(0)
-    ].copy()
-    data = data.sort_values("value_delta_kusd", ascending=False).head(5)
-    out = data[
+def build_event_day_table(event_days: pd.DataFrame) -> pd.DataFrame:
+    out = event_days[
         [
             "local_date",
             "event_types",
@@ -203,17 +209,19 @@ def build_case_screening_table(case_screen: pd.DataFrame) -> pd.DataFrame:
 
 def write_tables() -> None:
     TABLES.mkdir(parents=True, exist_ok=True)
-    matrix = pd.read_csv(DATA / "forecast_matrix.csv")
-    summary = pd.read_csv(DATA / "decision_summary.csv")
+    forecast_main = pd.read_csv(DATA / "forecast_main.csv")
+    forecast_seed = pd.read_csv(DATA / "forecast_seed_summary.csv")
+    decision_summary = pd.read_csv(DATA / "decision_summary.csv")
     seed_summary = pd.read_csv(DATA / "paired_seed_summary.csv")
     slices = pd.read_csv(DATA / "forecast_slice_metrics.csv")
-    case_screen = pd.read_csv(DATA / "case_screening.csv")
+    event_days = pd.read_csv(DATA / "event_day_examples.csv")
 
     tables = {
-        "main_forecast_table": build_main_forecast_table(matrix),
-        "main_decision_table": build_decision_table(summary),
+        "main_forecast_table": build_main_forecast_table(forecast_main),
+        "forecast_seed_summary": build_forecast_seed_table(forecast_seed),
+        "main_decision_table": build_decision_table(decision_summary),
         "paired_seed_summary": seed_summary.round(
-            {"mean": 2, "ci95_low": 2, "ci95_high": 2, "paired_t_p_value": 4}
+            {"mean": 3, "ci95_low": 3, "ci95_high": 3, "paired_t_p_value": 4}
         ),
         "forecast_slice_metrics": slices.round(
             {
@@ -225,7 +233,7 @@ def write_tables() -> None:
                 "mae_improvement_pct": 2,
             }
         ),
-        "case_screening_top5": build_case_screening_table(case_screen),
+        "event_day_examples": build_event_day_table(event_days),
     }
 
     for name, table in tables.items():
@@ -265,8 +273,7 @@ def plot_forecast_slices() -> None:
 
 
 def plot_value_cvar() -> None:
-    summary = pd.read_csv(DATA / "decision_summary.csv")
-    data = summary[summary["comparison"].eq("validation_selected")].copy()
+    data = pd.read_csv(DATA / "decision_summary.csv")
     style = {
         "Rule-core hybrid blend": ("Rule-core hybrid\nreference", OKABE_ITO["blue"], "s"),
         "Pure LLM cloud-rule LP": ("Pure LLM\ncloud-rule LP", OKABE_ITO["orange"], "^"),
@@ -310,7 +317,7 @@ def plot_value_cvar() -> None:
         bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "edgecolor": "0.82", "linewidth": 0.6},
     )
     ax.set_xlabel("CVaR95 loss (k USD/h, lower is better)")
-    ax.set_ylabel("Annual proxy value (M USD, higher is better)")
+    ax.set_ylabel("Test-period proxy value (M USD, higher is better)")
     ax.grid(True, alpha=0.18)
     ax.set_xlim(float(data["cvar95_loss_kusd_h"].min()) - 10, float(data["cvar95_loss_kusd_h"].max()) + 13)
     ax.set_ylim(float(data["value_musd"].min()) - 2.5, float(data["value_musd"].max()) + 2.2)
@@ -352,14 +359,15 @@ def plot_paired_seed_effects() -> None:
             ax.set_xlim(min(0.0, x_min - 0.12 * span), x_max + 0.12 * span)
         ax.set_ylim(-0.15, 0.15)
         ax.text(-0.12, 1.03, chr(ord("a") + panel_idx), transform=ax.transAxes, fontsize=10, fontweight="bold", va="bottom", ha="left")
-        ax.text(0.98, 0.93, f"{int(np.sum(values > 0))}/{len(values)} positive", transform=ax.transAxes, fontsize=7.4, ha="right", va="top", color="0.25")
+        ax.text(0.98, 0.93, f"{int(np.sum(values > 0))}/{len(values)} improved", transform=ax.transAxes, fontsize=7.4, ha="right", va="top", color="0.25")
     fig.tight_layout()
     save_figure(fig, "fig_paired_seed_effects")
 
 
 def plot_case_study() -> None:
-    data = pd.read_csv(DATA / "case_2024_03_13.csv").sort_values("timestamp_utc").copy()
+    data = pd.read_csv(DATA / "case_2025_03_07.csv").sort_values("timestamp_utc").copy()
     hours = data["hour"].astype(int).to_numpy()
+    case_date = str(data["local_date"].dropna().iloc[0])
     event_text = str(data["event_types"].dropna().iloc[0]).replace("|", ", ")
 
     fig, axes = plt.subplots(4, 1, figsize=(7.25, 7.35), sharex=True, gridspec_kw={"hspace": 0.24})
@@ -370,7 +378,7 @@ def plot_case_study() -> None:
     axes[0].set_ylabel("PV or bid (MW)")
     pv_top = float(data[["pv_mw", "anchor_bid_mw", "llm_hybrid_bid_mw"]].max().max())
     axes[0].set_ylim(-800.0, pv_top * 1.26)
-    axes[0].set_title(f"2024-03-13: {event_text}", loc="left", fontsize=9, pad=5)
+    axes[0].set_title(f"{case_date}: {event_text}", loc="left", fontsize=9, pad=5)
     axes[0].legend(frameon=False, ncol=3, loc="upper left")
 
     axes[1].plot(hours, data["da_lmp"], color=OKABE_ITO["orange"], lw=1.6, label="Day-ahead price")
@@ -431,10 +439,11 @@ def plot_case_study() -> None:
     axes[-1].set_xticks(np.arange(0, 24, 2))
     axes[-1].set_xlim(-0.5, 23.5)
     fig.subplots_adjust(top=0.965, left=0.14, right=0.985, bottom=0.075)
-    save_figure(fig, "fig_case_2024_03_13")
+    save_figure(fig, "fig_case_2025_03_07")
 
 
 def main() -> None:
+    reset_outputs()
     apply_style()
     copy_pipeline_overview()
     write_tables()

@@ -1,0 +1,7 @@
+target,model,feature_role,seed_count,rmse_mean,rmse_sd,mae_mean,mae_sd,source_model_column
+PV,MLP,No text,5,1186.032688,12.580294,633.215481,11.728478,pv_mlp
+PV,MLP,Rule-core text features,5,1221.089603,13.48479,668.618574,13.321227,pv_mlp_rule_core
+PV,MLP,Selected LLM cloud-rule feature,5,1167.345906,5.170277,614.886985,4.089902,pv_mlp_llm_rule_cloud
+RT price,Transformer,No text,5,18.267898,0.491866,10.896281,0.472346,rt_transformer_none
+RT price,Transformer,Rule-text weather scores,5,18.469986,0.114721,11.140948,0.222562,rt_transformer_text
+RT price,Transformer,LLM rule-equivalent weather scores,5,17.937685,0.356898,10.631198,0.458325,rt_transformer_llm_rule

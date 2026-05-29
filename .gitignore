@@ -2,7 +2,7 @@ __pycache__/
 .venv/
 venv/
 outputs/
-data_multi_weather_2023_2024/
+data_multi_weather_2022_2025/
 data/processed/
 data/raw/
 manifest.csv
