@@ -1,0 +1,6 @@
+strategy,pv_scenario,rt_scenario,anchor,lp_weight,seed_count,value_musd,cvar95_loss_kusd_h,imbalance_gwh
+MLP no-text deterministic anchor,--,--,MLP no-text,0.0,10,865.7654188299147,447.8524580085721,11250.95539154396
+No-text LP-anchor hybrid,MLP no-text,Transformer no-text,MLP no-text,0.25,10,869.124373877725,459.9408666111144,11844.64678132119
+LLM cloud-rule LP-anchor hybrid,MLP LLM cloud-rule,Transformer LLM-rule,MLP no-text,0.25,10,881.4068247928445,453.4317675485265,11596.426739479111
+Pure no-text LP,MLP no-text,Transformer no-text,none,1.0,10,854.9711619617646,525.7194332241977,14110.32249184068
+Pure LLM cloud-rule LP,MLP LLM cloud-rule,Transformer LLM-rule,none,1.0,10,888.1564081426939,503.5006668543496,13436.333474063356

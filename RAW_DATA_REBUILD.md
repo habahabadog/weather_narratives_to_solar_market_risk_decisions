@@ -1,6 +1,6 @@
 # Rebuild from public raw data
 
-This document describes the raw-data path behind the reported manuscript results. It starts from public CAISO, NOAA/NWS, NOAA Storm Events, and HRRR Zarr inputs, then rebuilds the neural forecast predictions, downstream decision runs, and manuscript enrichment tables.
+This document describes the raw-data path behind the reported manuscript results. It starts from public CAISO, NOAA/NWS, NOAA Storm Events, and HRRR Zarr inputs, then rebuilds the neural forecast predictions and the common-anchor downstream decision runs.
 
 The cached manuscript path in `README.md` is the fastest way to regenerate the released figures and tables. Use this raw rebuild path when you need to audit or refresh the model outputs from source data.
 
@@ -87,16 +87,19 @@ python scripts/run_selected_cloud_rule_pipeline.py \
   --output results_selected_cloud_rule_2022_2025_test_2024_2025
 ```
 
-The forecast/decision path is:
+The forecast path is:
 
 - PV reference: MLP with rule-core narrative features.
 - PV LLM: MLP with the LLM cloud-rule feature.
 - PV no-text: MLP without narrative features.
-- PV no-text anchor: deterministic MLP no-text forecast used by the LLM no-text-anchor hybrid.
-- CAISO public anchor: CAISO day-ahead public solar forecast.
 - RT reference: Transformer with rule-text narrative features.
 - RT LLM: Transformer with LLM rule-equivalent narrative features.
 - RT no-text: Transformer without narrative features.
+
+The downstream decision path uses the deterministic MLP no-text PV forecast as the common anchor. The two LP-anchor paths are:
+
+- No-text path: PV MLP no-text + RT Transformer no-text, anchored to MLP no-text.
+- LLM path: PV MLP LLM cloud-rule + RT Transformer LLM-rule, anchored to MLP no-text.
 
 ## 4. Run downstream decision experiments
 
@@ -106,23 +109,20 @@ python scripts/run_selected_cloud_rule_downstream.py \
   --master-path data_multi_weather_2022_2025/processed/master_hourly_caiso_noaa_2022-01-01_2026-01-01.csv \
   --output-dir results_selected_cloud_rule_2022_2025_downstream \
   --seeds 71000,71001,71011,71021,71031,71041,71051,71061,71071,71081 \
-  --lp-weights 0.25,0.50,0.75,1.00 \
+  --lp-weights 0.00,0.10,0.25,0.50,0.75,1.00 \
+  --selected-weight 0.25 \
   --residual-scale 1.0 \
   --cvar-gamma 0.25 \
   --deviation-penalty 50 \
   --scenario-count 20
 ```
 
-The downstream script writes the validation-selected rule-core hybrid, no-text hybrid, pure LLM LP, LLM rule-core-anchor hybrid, LLM no-text-anchor hybrid, and CAISO public-forecast anchor summaries, plus paired LLM-vs-rule-core and LLM-no-text-anchor-vs-no-text residual-bootstrap seed summaries.
+The downstream script writes the no-text and LLM common-anchor weight paths, the manuscript decision table, decision-frontier points, and paired residual-bootstrap seed summaries for the selected weight.
 
-## 5. Build enrichment outputs
+## 5. Regenerate cached manuscript outputs
 
 ```bash
-python scripts/build_selected_cloud_rule_enrichment.py \
-  --results-dir results_selected_cloud_rule_2022_2025_downstream \
-  --forecast-dir results_selected_cloud_rule_2022_2025_test_2024_2025 \
-  --case-date auto \
-  --date-tag reported
+python scripts/reproduce_manuscript_outputs.py
 ```
 
-The enrichment step writes forecast-slice tables, decision sensitivity tables, paired-seed summaries, and case-study inputs and figures.
+This final command rebuilds the released display tables and the three cached manuscript figures from the CSV artifacts in `data/`.

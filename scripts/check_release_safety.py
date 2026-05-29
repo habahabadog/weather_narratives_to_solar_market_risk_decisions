@@ -11,6 +11,7 @@ DEFAULT_ROOTS = [
     Path("config"),
     Path("data"),
     Path("assets"),
+    Path("outputs"),
     Path("README.md"),
     Path("RAW_DATA_REBUILD.md"),
     Path(".env.example"),
@@ -26,7 +27,6 @@ SKIP_DIRS = {
     "latest_llm_rule_daily_uncertainty_30seed_combined",
     "latest_llm_rule_daily_uncertainty_extra20",
     "code_release",
-    "outputs",
     "data_multi_weather_2022_2025",
 }
 TEXT_SUFFIXES = {".py", ".md", ".txt", ".tex", ".bib", ".json", ".csv", ".yml", ".yaml", ".example", ""}
@@ -55,6 +55,27 @@ PUBLIC_PHRASE_PATTERNS = [
         ("lock", "ed", r"\s+test"),
         ("711", "43"),
         ("711", "47"),
+        ("CAISO", r"\s+public", r"\s+forecast", r"\s+anchor"),
+        ("public", "-", "forecast", r"\s+anchor"),
+        ("rule", "-", "core", r"\s+anchor"),
+        ("decision", "_", "evidence"),
+        ("value", "_", "cvar", "_", "tradeoff"),
+        ("paired", "_", "seed", "_", "effects"),
+        ("forecast", "_", "slices"),
+        ("paired", "_", "seed", "_", "summary", "_", "vs", "_", "no", "_", "text"),
+        ("paired", "_", "seed", "_", "deltas", "_", "vs", "_", "no", "_", "text"),
+        ("paired", "_", "seed", "_", "summary", "_", "fused", "_", "vs", "_", "no", "_", "text"),
+        ("paired", "_", "seed", "_", "deltas", "_", "fused", "_", "vs", "_", "no", "_", "text"),
+        ("decision", "_", "summary", ".csv"),
+        ("lp", "_", "weight", "_", "sensitivity", ".csv"),
+        ("build", "_", "selected", "_", "cloud", "_", "rule", "_", "enrichment"),
+        ("llm", "_", "hybrid", "_", "bid", "_", "mw"),
+        (r"(^|,)", "anchor", "_", "bid", "_", "mw", r"(,|$)"),
+        ("264", r"\.943"),
+        ("5578", r"\.298"),
+        ("34", r"\.845"),
+        ("9", r"\.615"),
+        ("734", r"\.734"),
     ]
 ]
 
@@ -94,6 +115,10 @@ def scan_file(path: Path) -> list[str]:
     size_mb = path.stat().st_size / (1024 * 1024)
     if size_mb > MAX_GITHUB_FILE_MB:
         findings.append(f"large file over {MAX_GITHUB_FILE_MB:.0f} MB: {size_mb:.1f} MB")
+    normalized_path = "/".join(path.parts)
+    for pattern in PUBLIC_PHRASE_PATTERNS:
+        if pattern.search(normalized_path):
+            findings.append("path contains a disallowed release term")
     if not is_text_candidate(path):
         return findings
     text = path.read_text(encoding="utf-8", errors="ignore")

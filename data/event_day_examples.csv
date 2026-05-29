@@ -1,6 +1,2 @@
-local_date,event_types,value_delta_kusd,absolute_imbalance_reduction_mwh,pv_rmse_improvement_pct
-2025-03-07,Heavy Rain,264.943805,5578.298495,15.969644
-2025-08-24,Thunderstorm Wind,252.937612,5469.474571,16.287559
-2025-04-01,Tornado,248.520069,4041.903422,28.950302
-2025-05-06,Flash Flood,243.21184,5658.962231,23.380491
-2025-03-03,Heavy Rain,231.990073,4823.47444,21.741775
+local_date,event_types,reference,value_delta_kusd,absolute_imbalance_reduction_mwh,pv_rmse_improvement_pct
+2025-03-07,Heavy Rain,MLP no-text anchor,87.82916282331297,1947.7508614232574,10.259434242891404
